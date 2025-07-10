@@ -15,30 +15,7 @@ This is an advanced, end-to-end procurement workflow application built on a micr
 
 This application uses a microservices architecture to ensure scalability, maintainability, and separation of concerns. The system comprises a Streamlit frontend and three dedicated backend services for handling business logic, data extraction, and PDF generation.
 
-graph TD  
-    subgraph User  
-        Browser  
-    end
-
-    subgraph "Docker Network (Internal Communication)"  
-        A\[frontend-service:8501\]  
-        B\[procurement-service:8000\]  
-        C\[data-extraction-service:8001\]  
-        D\[pdf-service:8002\]  
-    end
-
-    subgraph "External APIs"  
-        E\[OpenAI API\]  
-        F\[AgentQL API\]  
-    end
-
-    Browser \-- HTTPS \--\> A  
-    A \-- API Call \--\> B  
-    A \-- API Call \--\> C  
-    A \-- API Call \--\> D  
-    B \-- API Call \--\> E  
-    C \-- API Call \--\> F
-
+![Architecture Diagram](./assets/architecture_diagram.png)
 ## **🛠️ Technology Stack**
 
 * **Frontend**: Streamlit  
