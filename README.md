@@ -2,6 +2,8 @@
 
 This is an advanced, end-to-end procurement workflow application built on a microservices architecture. This tool streamlines the entire procurement process, from generating a Request for Quote (RFQ) with AI to creating the final Purchase Order (PO).
 
+Demo : https://ai-procure-app-kanokpon.streamlit.app/
+
 ## **✨ Features**
 
 * **AI-Powered RFQ Generation**: Utilizes a chatbot interface to define procurement needs and generate a professional, structured RFQ document.  
@@ -36,38 +38,43 @@ Before you begin, ensure you have the following installed:
 Follow these steps to get the application running locally.
 
 ### **1\. Clone the Repository**
-
-git clone \<your-repository-url\>  
-cd \<repository-folder\>
+```
+git clone https://github.com/chkano/ai-procurement-assist.git 
+cd ai-procurement-assist
+```
 
 ### **2\. Create Environment File for Backend Keys**
 
 Create a .env file in the project's root directory. This file holds the API keys for the backend services.
 
 \# .env  
-OPENAI\_API\_KEY="your\_openai\_api\_key\_here"  
-AGENTQL\_API\_KEY="your\_agentql\_api\_key\_here"
+```
+OPENAI_API_KEY="your_openai_api_key_here"  
+AGENTQL_API_KEY="your_agentql_api_key_here"
+```
 
 ### **3\. Create Secrets File for Streamlit Frontend**
 
 Streamlit requires a .streamlit/secrets.toml file for secrets management. Create the necessary folder and file:
 
-\# From the root directory, run:  
-mkdir \-p frontend-service/.streamlit
+\# From the root directory, run: 
+`mkdir -p frontend-service/.streamlit`
 
 Now, create a file named secrets.toml inside frontend-service/.streamlit/.
 
 \# frontend-service/.streamlit/secrets.toml  
 \# This file is needed by Streamlit, but the keys are passed to the backends via the .env file.  
-OPENAI\_API\_KEY \= "your\_openai\_api\_key\_here"  
-AGENTQL\_API\_KEY \= "your\_agentql\_api\_key\_here"
+```
+OPENAI_API_KEY="your_openai_api_key_here"  
+AGENTQL_API_KEY="your_agentql_api_key_here"
+```
 
 ### **4\. Build and Run the Application**
 
 Use Docker Compose to build the images and start all services. The \--build flag ensures that any changes you've made are included.
-
-docker-compose up \--build
-
+```
+docker-compose up --build
+```
 The initial build may take a few minutes.
 
 ## **💻 Usage**
