@@ -1,47 +1,18 @@
-import requests
 import streamlit as st
 import json
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Import from our other project modules
 import config
+from api_clients import (
+    generate_rfq_with_openai, analyze_vendor_quotes,
+    extract_recommendation_summary, generate_purchase_order,get_chat_response)
 
-# --- API Service URLs ---
-# These URLs are based on the service names in docker-compose
-PROCUREMENT_SERVICE_URL = "http://procurement-service:8000"
-DATA_EXTRACTION_URL = "http://data-extraction-service:8001"
-PDF_SERVICE_URL = "http://pdf-service:8002"
+from data_processing import extract_quotation_data, send_to_webhook
+from pdf_utils import create_pdf_document, create_comparison_table_pdf
 
-def send_to_webhook(data, webhook_url):
-    """Send data to a specified webhook endpoint."""
-    if not webhook_url:
-        return {"success": False, "error": "Webhook URL is not provided."}
-    try:
-        response = requests.post(
-            webhook_url,
-            json=data,
-            headers={'Content-Type': 'application/json'},
-            timeout=30
-        )
-        response.raise_for_status() # Raise an exception for bad status codes
-        return {"success": True, "status_code": response.status_code, "response": response.text}
-    except requests.exceptions.RequestException as e:
-        return {"success": False, "error": f"Failed to send data: {str(e)}"}
-    
-# --- Helper function to handle API calls ---
-def handle_api_request(method, url, **kwargs):
-    try:
-        response = requests.request(method, url, **kwargs)
-        response.raise_for_status()
-        if 'application/json' in response.headers.get('Content-Type', ''):
-            return response.json()
-        return response.content
-    except requests.exceptions.RequestException as e:
-        st.error(f"API Request Failed: {e.response.text if e.response else str(e)}")
-        return None
-
-# --- UI Rendering Functions (No changes to display_company_header, display_api_status, render_sidebar) ---
+# --- No changes to these functions ---
 def display_company_header():
     """Displays the company information header if it exists."""
     company_name = st.session_state[config.S_COMPANY_CONFIG].get('company_name')
@@ -115,53 +86,54 @@ def render_sidebar():
         st.rerun()
 
 
-# --- REFACTORED WORKFLOW STEP FUNCTIONS ---
+# --- MODIFIED FUNCTIONS START HERE ---
 
 def render_step_1_rfq():
+    """Renders the UI for Step 1: RFQ Generation with a Chatbot."""
     st.header("💬 Step 1: Generate Request for Quote (RFQ)")
+
     col1, col2 = st.columns([2, 1])
 
     with col1:
         st.subheader("Chat with AI to Define Requirements")
+        # Display chat history
         for message in st.session_state[config.S_CHAT_MESSAGES]:
             with st.chat_message(message["role"]):
                 st.write(message["content"])
 
+        # Chat input
         if prompt := st.chat_input("Describe your procurement needs..."):
             st.session_state[config.S_CHAT_MESSAGES].append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.write(prompt)
 
+            # Generate and display AI response
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    payload = {
-                        "messages": st.session_state[config.S_CHAT_MESSAGES],
-                        "company_config": st.session_state[config.S_COMPANY_CONFIG]
-                    }
-                    response_data = handle_api_request("POST", f"{PROCUREMENT_SERVICE_URL}/chat", json=payload)
-                    if response_data:
-                        response = response_data.get("response")
-                        st.write(response)
-                        st.session_state[config.S_CHAT_MESSAGES].append({"role": "assistant", "content": response})
+                    response = get_chat_response(
+                        st.session_state[config.S_CHAT_MESSAGES],
+                        st.session_state[config.S_COMPANY_CONFIG]
+                    )
+                    st.write(response)
+                    st.session_state[config.S_CHAT_MESSAGES].append({"role": "assistant", "content": response})
 
     with col2:
         st.subheader("Finalize and Generate")
-        requirements_text = st.text_area("Final Requirements Summary:", height=250, placeholder="Summarize the final requirements here...")
+        requirements_text = st.text_area(
+            "Final Requirements Summary:",
+            height=250,
+            placeholder="Summarize the final requirements here after chatting with the AI..."
+        )
         if st.button("🤖 Generate RFQ Document", type="primary", use_container_width=True):
             if requirements_text:
                 with st.spinner("Generating RFQ document..."):
-                    payload = {
-                        "user_requirements": requirements_text,
-                        "company_config": st.session_state[config.S_COMPANY_CONFIG]
+                    rfq_content = generate_rfq_with_openai(requirements_text, st.session_state[config.S_COMPANY_CONFIG])
+                    st.session_state[config.S_RFQ_DATA] = {
+                        "requirements": requirements_text,
+                        "content": rfq_content,
+                        "generated_at": datetime.now().isoformat()
                     }
-                    response_data = handle_api_request("POST", f"{PROCUREMENT_SERVICE_URL}/generate-rfq", json=payload)
-                    if response_data:
-                        st.session_state[config.S_RFQ_DATA] = {
-                            "requirements": requirements_text,
-                            "content": response_data.get("content"),
-                            "generated_at": datetime.now().isoformat()
-                        }
-                        st.success("RFQ Generated!")
+                    st.success("RFQ Generated!")
             else:
                 st.error("Please provide a summary of requirements.")
 
@@ -170,30 +142,37 @@ def render_step_1_rfq():
         with st.expander("View RFQ Content", expanded=False):
             st.json(st.session_state[config.S_RFQ_DATA].get("content", "{}"))
 
-        payload = {
-            "content": st.session_state[config.S_RFQ_DATA],
-            "title": "Procurement Request",
-            "doc_type": "RFQ"
-        }
-        pdf_buffer = handle_api_request("POST", f"{PDF_SERVICE_URL}/generate-standard-pdf", json=payload)
-        if pdf_buffer:
-            st.download_button(label="📄 Download RFQ as PDF", data=pdf_buffer, file_name=f"RFQ_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
+        pdf_buffer = create_pdf_document(st.session_state[config.S_RFQ_DATA], "Procurement Request", "RFQ")
+        st.download_button(
+            label="📄 Download RFQ as PDF",
+            data=pdf_buffer,
+            file_name=f"RFQ_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
+# --- No changes needed for Step 2, 3, 4 ---
 def render_step_2_upload_quotations():
+    """Renders the UI for Step 2: Upload and Extract Quotations."""
     st.header("📄 Step 2: Upload and Extract Quotations")
-    uploaded_files = st.file_uploader("Upload vendor quotation files (PDF, PNG, JPG)", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Upload vendor quotation files (PDF, PNG, JPG)",
+        type=["pdf", "png", "jpg", "jpeg"],
+        accept_multiple_files=True
+    )
+
     if uploaded_files:
         for uploaded_file in uploaded_files:
             vendor_name = st.text_input(f"Vendor Name for `{uploaded_file.name}`", key=f"vendor_{uploaded_file.name}")
             if vendor_name and st.button(f"Extract from {uploaded_file.name}", key=f"extract_{uploaded_file.name}"):
                 with st.spinner(f"Extracting data from {vendor_name}'s quote..."):
-                    files = {'file': (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    data = {'vendor_name': vendor_name}
-                    extracted_data = handle_api_request("POST", f"{DATA_EXTRACTION_URL}/extract-quotation", files=files, data=data)
-                    if extracted_data:
+                    extracted_data = extract_quotation_data(uploaded_file, vendor_name)
+                    if "error" in extracted_data:
+                        st.error(f"Error for {vendor_name}: {extracted_data['error']}")
+                    else:
                         st.session_state[config.S_QUOTATIONS][vendor_name] = extracted_data
                         st.success(f"Successfully extracted data for {vendor_name}!")
-                        st.rerun()
+                        st.rerun() # Rerun to update the display
 
     if st.session_state[config.S_QUOTATIONS]:
         st.subheader("Extracted Quotations")
@@ -202,77 +181,76 @@ def render_step_2_upload_quotations():
                 st.json(data)
 
 def render_step_3_vendor_analysis():
+    """Renders the UI for Step 3: Vendor Analysis."""
     st.header("🔍 Step 3: AI-Powered Vendor Analysis")
     if not st.session_state[config.S_QUOTATIONS]:
-        st.warning("Please upload and extract quotations in Step 2.")
+        st.warning("Please upload and extract quotations in Step 2 before proceeding.")
         return
 
     if st.button("🤖 Analyze Vendors with AI", type="primary", use_container_width=True):
         with st.spinner("AI is analyzing vendor quotes..."):
-            # First, get the detailed analysis
-            analysis_payload = {"quotations_data": st.session_state[config.S_QUOTATIONS]}
-            analysis_data = handle_api_request("POST", f"{PROCUREMENT_SERVICE_URL}/analyze-quotes", json=analysis_payload)
-            if analysis_data:
-                analysis_json = analysis_data.get('analysis')
-                # Then, get the summary from the analysis
-                summary_payload = {"analysis_text": analysis_json}
-                summary_data = handle_api_request("POST", f"{PROCUREMENT_SERVICE_URL}/extract-summary", json=summary_payload)
-                if summary_data:
-                    st.session_state[config.S_VENDOR_RECOMMENDATION] = {
-                        "analysis": analysis_json,
-                        "summary": summary_data.get('summary')
-                    }
-                    st.success("Analysis complete!")
+            analysis_json = analyze_vendor_quotes(st.session_state[config.S_QUOTATIONS])
+            summary = extract_recommendation_summary(analysis_json)
+            st.session_state[config.S_VENDOR_RECOMMENDATION] = {
+                "analysis": analysis_json,
+                "summary": summary
+            }
+            st.success("Analysis complete!")
 
     if st.session_state[config.S_VENDOR_RECOMMENDATION]:
         st.subheader("🎯 Final Recommendation")
-        st.info(st.session_state[config.S_VENDOR_RECOMMENDATION].get("summary", "No summary."))
+        st.info(st.session_state[config.S_VENDOR_RECOMMENDATION].get("summary", "No summary available."))
+
         with st.expander("View Detailed Analysis Report"):
             st.text_area("Full AI Analysis:", st.session_state[config.S_VENDOR_RECOMMENDATION].get("analysis", ""), height=300)
 
-        payload = {"quotations_data": st.session_state[config.S_QUOTATIONS]}
-        pdf_buffer = handle_api_request("POST", f"{PDF_SERVICE_URL}/generate-comparison-pdf", json=payload)
-        if pdf_buffer:
-            st.download_button(label="📊 Download Comparison as PDF", data=pdf_buffer, file_name="Vendor_Comparison.pdf", mime="application/pdf", use_container_width=True)
-
+        pdf_buffer = create_comparison_table_pdf(st.session_state[config.S_QUOTATIONS])
+        st.download_button(
+            label="📊 Download Comparison as PDF",
+            data=pdf_buffer,
+            file_name="Vendor_Comparison.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
 def render_step_4_purchase_order():
+    """Renders the UI for Step 4: Purchase Order Generation."""
     st.header("📋 Step 4: Generate Purchase Order")
     if not st.session_state[config.S_VENDOR_RECOMMENDATION]:
-        st.warning("Please analyze vendors in Step 3.")
+        st.warning("Please analyze vendors in Step 3 before creating a Purchase Order.")
         return
+
     vendors = list(st.session_state[config.S_QUOTATIONS].keys())
     selected_vendor = st.selectbox("Select a vendor for the Purchase Order:", vendors)
+
     if st.button(f"Generate PO for {selected_vendor}", type="primary", use_container_width=True):
         with st.spinner(f"Generating Purchase Order for {selected_vendor}..."):
-            payload = {
-                "rfq_data": st.session_state[config.S_RFQ_DATA],
-                "selected_vendor": selected_vendor,
-                "recommendation_data": st.session_state[config.S_VENDOR_RECOMMENDATION],
-                "company_config": st.session_state[config.S_COMPANY_CONFIG]
+            po_content = generate_purchase_order(
+                st.session_state[config.S_RFQ_DATA],
+                selected_vendor,
+                st.session_state[config.S_VENDOR_RECOMMENDATION],
+                st.session_state[config.S_COMPANY_CONFIG]
+            )
+            st.session_state[config.S_PURCHASE_ORDER] = {
+                "vendor": selected_vendor,
+                "content": po_content,
+                "generated_at": datetime.now().isoformat()
             }
-            po_data = handle_api_request("POST", f"{PROCUREMENT_SERVICE_URL}/generate-po", json=payload)
-            if po_data:
-                st.session_state[config.S_PURCHASE_ORDER] = {
-                    "vendor": selected_vendor,
-                    "content": po_data.get('content'),
-                    "generated_at": datetime.now().isoformat()
-                }
-                st.success("Purchase Order generated!")
+            st.success("Purchase Order generated!")
 
     if st.session_state[config.S_PURCHASE_ORDER]:
         st.subheader("Generated Purchase Order")
         with st.expander("View PO Content"):
             st.text_area("PO JSON Content", st.session_state[config.S_PURCHASE_ORDER].get("content", ""), height=300)
-        
-        payload = {
-            "content": st.session_state[config.S_PURCHASE_ORDER],
-            "title": f"PO for {st.session_state[config.S_PURCHASE_ORDER]['vendor']}",
-            "doc_type": "Purchase Order"
-        }
-        pdf_buffer = handle_api_request("POST", f"{PDF_SERVICE_URL}/generate-standard-pdf", json=payload)
-        if pdf_buffer:
-            st.download_button(label="📄 Download PO as PDF", data=pdf_buffer, file_name=f"PO_{st.session_state[config.S_PURCHASE_ORDER]['vendor']}.pdf", mime="application/pdf", use_container_width=True)
+
+        pdf_buffer = create_pdf_document(st.session_state[config.S_PURCHASE_ORDER], f"PO for {st.session_state[config.S_PURCHASE_ORDER]['vendor']}", "Purchase Order")
+        st.download_button(
+            label="📄 Download PO as PDF",
+            data=pdf_buffer,
+            file_name=f"PO_{st.session_state[config.S_PURCHASE_ORDER]['vendor']}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
 def render_step_5_export():
     """Renders the UI for Step 5: Export & Integration with enhanced webhook."""

@@ -5,6 +5,12 @@ from datetime import datetime
 # Import from our refactored modules
 import config
 import ui_components
+from data_processing import extract_quotation_data, send_to_webhook
+from api_clients import (
+    generate_rfq_with_openai, analyze_vendor_quotes,
+    extract_recommendation_summary, generate_purchase_order
+)
+from pdf_utils import create_pdf_document, create_comparison_table_pdf
 
 # --- PAGE SETUP ---
 st.set_page_config(**config.PAGE_CONFIG)
