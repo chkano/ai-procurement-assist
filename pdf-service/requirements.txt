@@ -1,0 +1,4 @@
+fastapi==0.116.0
+uvicorn[standard]
+reportlab==4.4.2
+pydantic

@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  frontend-service:
+    build: ./frontend-service
+    container_name: frontend-service
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./frontend-service:/app
+      - ./frontend-service/.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+    depends_on:
+      - procurement-service
+      - data-extraction-service
+      - pdf-service
+    restart: unless-stopped
+
+  procurement-service:
+    build: ./procurement-service
+    container_name: procurement-service
+    # ports:
+    #   - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./procurement-service:/app
+    restart: unless-stopped
+
+  data-extraction-service:
+    build: ./data-extraction-service
+    container_name: data-extraction-service
+    # ports:
+    #   - "8001:8000"
+    environment:
+      - AGENTQL_API_KEY=${AGENTQL_API_KEY}
+    volumes:
+      - ./data-extraction-service:/app
+    restart: unless-stopped
+    
+  pdf-service:
+    build: ./pdf-service
+    container_name: pdf-service
+    # ports:
+    #   - "8002:8000"
+    volumes:
+      - ./pdf-service:/app
+    restart: unless-stopped
