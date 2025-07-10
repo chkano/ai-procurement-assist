@@ -100,6 +100,118 @@ The application is composed of four distinct services that run in separate Docke
 | data-extraction-service | 8001 | 8002 | Manages data extraction from documents via the AgentQL API. |
 | pdf-service | 8002 | 8003 | Generates all PDF documents for RFQs, POs, and reports. |
 
+## 📋 Workflow Steps
+
+### Step 1: 💬 Generate RFQ
+- **Chat Interface**: Describe your procurement needs to the AI
+- **AI Generation**: Automatically generates professional RFQ documents
+- **PDF Export**: Download RFQ as formatted PDF
+
+### Step 2: 📄 Upload Quotations
+- **Multi-file Upload**: Upload quotations from multiple vendors
+- **AI Extraction**: AgentQL automatically extracts structured data
+- **Comparison View**: Side-by-side quotation comparison
+
+### Step 3: 🔍 Vendor Analysis
+- **AI Analysis**: OpenAI analyzes all quotations
+- **Recommendations**: Detailed vendor recommendations with reasoning
+- **Risk Assessment**: Evaluation of quality, delivery, and pricing
+
+### Step 4: 📋 Purchase Order
+- **Vendor Selection**: Choose recommended vendor
+- **PO Generation**: AI creates professional purchase orders
+- **PDF Export**: Download formatted purchase orders
+
+### Step 5: 📤 Export & Integration
+- **JSON Export**: Complete procurement data in structured format
+- **Webhook Integration**: Send data to external systems
+- **API Integration**: Ready for ERP/accounting system integration
+
+## 🎯 Key Features
+
+### AI-Powered Chat
+- Natural language requirement gathering
+- Professional RFQ document generation
+- Context-aware recommendations
+
+### Intelligent Document Processing
+- Extracts vendor information, pricing, terms
+- Handles PDFs and images
+- Structured data output
+
+### Comprehensive Analysis
+- Multi-criteria vendor evaluation
+- Price comparison and analysis
+- Risk assessment and recommendations
+
+### Professional Documentation
+- PDF generation for RFQs and POs
+- Professional formatting and layout
+- Customizable templates
+
+### Integration Ready
+- JSON data export
+- Webhook notifications
+- API-friendly data structures
+
+## 📊 Data Structures
+
+### RFQ Data Format
+```json
+{
+  "requirements": "User requirements text",
+  "content": "Generated RFQ content",
+  "generated_at": "2024-01-01T12:00:00"
+}
+```
+
+### Quotation Data Format
+```json
+{
+  "vendor_name": "Vendor Name",
+  "vendor_info": {
+    "contact_info": "Contact details",
+    "address": "Vendor address"
+  },
+  "items": [
+    {
+      "description": "Item description",
+      "quantity": "Quantity",
+      "unit_price": "Price per unit",
+      "total_price": "Total price"
+    }
+  ],
+  "totals": {
+    "subtotal": "Subtotal",
+    "tax": "Tax amount",
+    "total": "Total amount"
+  }
+}
+```
+
+## 🔗 Integration Options
+
+### Webhook Integration
+Send complete procurement data to external systems:
+```json
+POST /your-webhook-endpoint
+{
+  "rfq": {...},
+  "quotations": {...},
+  "analysis": {...},
+  "purchase_order": {...},
+  "timestamp": "2024-01-01T12:00:00"
+}
+```
+
+### JSON Export
+Export all data for integration with:
+- ERP systems
+- Accounting software
+- Procurement platforms
+- Custom applications
+
+
 ## **📄 License**
 
 This project is licensed under the MIT License. See the LICENSE file for more details.
